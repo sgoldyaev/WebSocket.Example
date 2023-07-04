@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using WebSocket.Example.TPLEventsRecycleStream;
 
 namespace WebSocket.Example;
 
@@ -27,7 +28,6 @@ public class BinanceClient : IDisposable
         socket.OnClose -= SocketOnClosed;
         socket.OnError -= SocketOnError;
         socket.OnMessage -= SocketOnMessage;
-        socket.Dispose();
     }
 
     public void Connect()
