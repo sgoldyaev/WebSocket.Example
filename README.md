@@ -22,6 +22,7 @@ Building a reliable and efficient pipeline for practical usage has become a true
 - https://medium.com/draftkings-engineering/entering-actor-model-nirvana-with-f-and-tpl-dataflow-b8ab34b84656
 - https://codereview.stackexchange.com/questions/276263/general-web-socket-client-with-auto-reconnect-capabilities
 - https://adamsitnik.com/Array-Pool/
+- https://github.com/dotnet/runtime/blob/main/src/libraries/System.Net.WebSockets/src/System/Net/WebSockets/ManagedWebSocket.cs
 
 ## Fiddler logs
   ![image](https://github.com/sgoldyaev/WebSocket.Example/assets/25266453/a2b68368-56e8-47c9-81e4-a097deddf683)
