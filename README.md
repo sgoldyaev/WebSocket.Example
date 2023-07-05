@@ -27,5 +27,5 @@ Building a reliable and efficient pipeline for practical usage has become a true
   ![image](https://github.com/sgoldyaev/WebSocket.Example/assets/25266453/a2b68368-56e8-47c9-81e4-a097deddf683)
 
 ## Further steps
-- Replace MemoryStream with RecyclableMemoryStream https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream
+- ~~Replace MemoryStream with RecyclableMemoryStream https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream~~
 - Replace TPL DataFlow with Task.Streams
