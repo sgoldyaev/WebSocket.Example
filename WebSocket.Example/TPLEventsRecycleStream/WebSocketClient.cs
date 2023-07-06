@@ -144,7 +144,7 @@ public class WebSocketClient
             using var timeOut = new CancellationTokenSource(OPERATION_TIMEOUT_MS);
             using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeOut.Token);
 
-            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Close", operation.Token);
+            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Close", operation.Token);
         });
     }
 
@@ -190,9 +190,6 @@ public class WebSocketClient
 
                 try
                 {
-                    /// NOTE [sg]: we don't want to process messages after SendClose frame
-                    //while (socket?.State == WebSocketState.Open)
-
                     /// NOTE [sg]: we want to get messages after SendClose frame but before CloseReceived
                     while (socket?.State == WebSocketState.Open || socket?.State == WebSocketState.CloseSent)
                     {
