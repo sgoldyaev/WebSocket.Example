@@ -91,7 +91,7 @@ public class WebSocketClient
 
             OnError?.Invoke(this, e);
 
-            OnClose?.Invoke(this, CloseReason.Error);
+            OnClose?.Invoke(this, new CloseResult(CloseReason.Error, WebSocketCloseStatus.ProtocolError, e.Message));
         }
     }
 
@@ -127,9 +127,6 @@ public class WebSocketClient
 
             var receiveTask = ReceivingCommand(cancellation);
             await receiving.SendAsync(receiveTask, operation.Token);
-
-            /// NOTE [sg]: eager notification, it is also possible to notify after socket?.State complete to Opened transition
-            OnOpen?.Invoke(this);
         });
     }
 
@@ -138,22 +135,16 @@ public class WebSocketClient
         return new Command(async () =>
         {
             /// NOTE [sg]: we want to process Disconnect only once. Skip Disconnection after CloseSend
-            if (socket is null || !(socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived)) return;
+            if (socket is null || !(socket.State == WebSocketState.Open || socket.State == WebSocketState.CloseReceived || socket.State == WebSocketState.CloseSent))
+            {
+                log.WriteLine($"WebSocket: Invalid state '{socket?.State}' for Disconnect operation.");
+                return;
+            };
 
             using var timeOut = new CancellationTokenSource(OPERATION_TIMEOUT_MS);
             using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellation, timeOut.Token);
 
-            if (socket.State == WebSocketState.Open)
-                await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Close", operation.Token);
-
-            else if (socket.State == WebSocketState.CloseReceived)
-                await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledge Close", operation.Token);
-
-            else
-                log.WriteLine($"WebSocket: Invalid state '{socket.State}' for Disconnect operation.");
-
-            /// NOTE [sg]: eager notification, it is also possible to notify after socket?.State complete to Closed transition
-            OnClose?.Invoke(this, reason);
+            await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Close", operation.Token);
         });
     }
 
@@ -177,7 +168,15 @@ public class WebSocketClient
     {
         return new Command(async () =>
         {
+            var onOpen = OnOpen;
+
+            var onClose = OnClose;
+
             var reason = CloseReason.Client;
+
+            WebSocketCloseStatus? status = WebSocketCloseStatus.NormalClosure;
+
+            string? statusDescription = default;
 
             var memory = System.Net.WebSockets.WebSocket.CreateClientBuffer(RECEIVE_BUFFER_BYTES, SEND_BUFFER_BYTES);
 
@@ -185,25 +184,24 @@ public class WebSocketClient
 
             while (receiveCancellation.IsCancellationRequested == false)
             {
-                /* 
-                /// NOTE [sg]: It is also possible to notify OnOpen when socket.State == WebSocketState.Open
-                while (socket?.State != WebSocketState.Open)
-                    await Task.Delay(10);
+                Stream stream = Stream.Null;
 
-                OnOpen?.Invoke(this);
-                */
+                WebSocketReceiveResult? result = default;
 
-                /// NOTE [sg]: we don't want to process messages after SendClose frame
-                while (socket?.State == WebSocketState.Open)
-
-                /// NOTE [sg]: we want to get messages after SendClose frame but before CloseReceived
-                //while (socket?.State == WebSocketState.Open || socket?.State == WebSocketState.CloseSent)
+                try
                 {
-                    WebSocketReceiveResult? result = default;
+                    /// NOTE [sg]: we don't want to process messages after SendClose frame
+                    //while (socket?.State == WebSocketState.Open)
 
-                    var stream = streamManager.GetStream("webSocketEvent", memory.Count);
-                    try
+                    /// NOTE [sg]: we want to get messages after SendClose frame but before CloseReceived
+                    while (socket?.State == WebSocketState.Open || socket?.State == WebSocketState.CloseSent)
                     {
+                        onOpen?.Invoke(this);
+
+                        onOpen = null;
+
+                        stream = streamManager.GetStream("webSocketEvent", memory.Count);
+
                         do
                         {
                             result = await socket.ReceiveAsync(memory, receiveCancellation.Token);
@@ -214,43 +212,45 @@ public class WebSocketClient
                         stream.Position = 0;
 
                         await messages.SendAsync(stream);
-
-                        if (socket?.State == WebSocketState.CloseReceived && result?.MessageType == WebSocketMessageType.Close)
-                        {
-                            reason = CloseReason.Server;
-
-                            break;
-                        }
                     }
-                    catch (Exception e)
+
+                    if (socket?.State == WebSocketState.CloseReceived && result?.MessageType == WebSocketMessageType.Close)
                     {
-                        log.WriteLine($"WebSocket:OnException State:{socket?.State}, {e}");
+                        reason = CloseReason.Server;
 
-                        stream.Dispose();
+                        status = result?.CloseStatus;
 
-                        reason = CloseReason.Error;
+                        statusDescription = result?.CloseStatusDescription;
 
-                        OnError?.Invoke(this, e);
-
-                        break;
+                        await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Acknowledge Close", cancellation);
                     }
                 }
+                catch (Exception e)
+                {
+                    log.WriteLine($"WebSocket:OnException State:{socket?.State}, {e}");
 
-                /*
-                /// NOTE [sg]: It is also possible to notify OnClose when socket.State == WebSocketState.Closed
-                /// in this case DisconnectionCommand should be process after receiving result?.MessageType == WebSocketMessageType.Close 
-                while (socket?.State != WebSocketState.Closed || socket?.State != WebSocketState.Abort)
-                    await Task.Delay(10);
+                    stream.Dispose();
 
-                OnClose?.Invoke(this, reason);
-                */
+                    reason = CloseReason.Error;
+
+                    status = WebSocketCloseStatus.ProtocolError;
+
+                    statusDescription = e.Message;
+
+                    OnError?.Invoke(this, e);
+                }
 
                 receiveCancellation.Cancel();
             }
 
-            var disconnect = DisconnectionCommand(reason, cancellation);
-
-            await requests.SendAsync(disconnect);
+            if (socket?.State == WebSocketState.Closed || socket?.State == WebSocketState.Aborted)
+            {
+                onClose?.Invoke(this, new CloseResult(reason, status, statusDescription));
+            }
+            else
+            {
+                log.WriteLine($"WebSocket:OnClosing invalid state State:{socket?.State}");
+            }
         });
     }
 }
