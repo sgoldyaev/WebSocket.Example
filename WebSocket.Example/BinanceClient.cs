@@ -70,11 +70,11 @@ public class BinanceClient : IDisposable
     {
         if (stream.Length > 0)
         {
-            var node = JsonNode.Parse(stream);
-            if (node is not null)
+            //var node = JsonNode.Parse(stream);
+            //if (node is not null)
             {
-                /// Log($"Queued:{queued}, Stream.Length {stream.Length}");
-                Log($"Queued:{queued}, Message:{node.ToJsonString(options)}");
+                Log($"Queued:{queued}, Stream.Length {stream.Length}");
+                ///Log($"Queued:{queued}, Message:{node.ToJsonString(options)}");
             }
         }
         else
@@ -92,9 +92,9 @@ public class BinanceClient : IDisposable
         SubscribeTrades();
     }
 
-    private void SocketOnClosed(WebSocketClient socket, CloseReason reason)
+    private void SocketOnClosed(WebSocketClient socket, CloseResult result)
     {
-        if (reason == CloseReason.Client)
+        if (result.Reason == CloseReason.Client)
         {
             Log("Closed");
         }
