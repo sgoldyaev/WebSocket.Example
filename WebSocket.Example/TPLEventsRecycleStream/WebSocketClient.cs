@@ -1,4 +1,5 @@
-﻿using Microsoft.IO;
+﻿using CommunityToolkit.Diagnostics;
+using Microsoft.IO;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
@@ -17,7 +18,7 @@ public class WebSocketClient
 
     private readonly RecyclableMemoryStreamManager streamManager;
     private readonly Uri uri;
-    private readonly IWebProxy proxy;
+    private readonly IWebProxy? proxy;
 
     private readonly ActionBlock<Command> requests;
     private readonly ActionBlock<Command> receiving;
@@ -25,9 +26,11 @@ public class WebSocketClient
 
     private ClientWebSocket? socket;
 
-    public WebSocketClient(string url, IWebProxy webProxy)
+    public WebSocketClient(Uri url, IWebProxy webProxy)
     {
-        uri = new Uri(url);
+        Guard.IsNotNull(url);
+
+        uri = url;
         proxy = webProxy;
         streamManager = new RecyclableMemoryStreamManager();
 
@@ -42,12 +45,15 @@ public class WebSocketClient
         messages = new ActionBlock<Stream>(OnProcessMessage, executionOptions);
     }
 
-    public WebSocketState? State => socket?.State;
-
     public event OnWebSocketOpen? OnOpen;
     public event OnWebSocketClose? OnClose;
     public event OnWebSocketError? OnError;
     public event OnWebSocketMessage? OnMessage;
+
+    public void Dispose()
+    {
+        socket?.Dispose();
+    }
 
     public Task ConnectAsync(CancellationToken cancellation)
     {
@@ -65,6 +71,8 @@ public class WebSocketClient
 
     public Task SendAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellation)
     {
+        Guard.IsNotEmpty(buffer);
+
         var command = SendCommand(buffer, cancellation);
 
         return requests.SendAsync(command);
@@ -72,6 +80,8 @@ public class WebSocketClient
 
     public Task SendAsync(string request, CancellationToken cancellation)
     {
+        Guard.IsNotNullOrEmpty(request);
+
         var buffer = Encoding.UTF8.GetBytes(request);
 
         return SendAsync(buffer, cancellation);
@@ -174,7 +184,7 @@ public class WebSocketClient
 
             var reason = CloseReason.Client;
 
-            WebSocketCloseStatus? status = WebSocketCloseStatus.NormalClosure;
+            WebSocketCloseStatus? status = default;
 
             string? statusDescription = default;
 
@@ -243,6 +253,8 @@ public class WebSocketClient
             if (socket?.State == WebSocketState.Closed || socket?.State == WebSocketState.Aborted)
             {
                 onClose?.Invoke(this, new CloseResult(reason, status, statusDescription));
+
+                onClose = null;
             }
             else
             {

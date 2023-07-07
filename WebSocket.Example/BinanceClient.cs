@@ -9,13 +9,15 @@ namespace WebSocket.Example;
 public class BinanceClient : IDisposable
 {
     private readonly int RECONNECT_DELAY_MS = 1_000;
+    private readonly Uri uri = new Uri("wss://stream.binance.com/stream");
+    private readonly IWebProxy fiddler = new WebProxy("http://127.0.0.1:8888");
     private readonly JsonSerializerOptions options = new JsonSerializerOptions { WriteIndented = false };
     private readonly CancellationToken none = CancellationToken.None;
     private readonly WebSocketClient socket;
 
     public BinanceClient()
     {
-        socket = new WebSocketClient("wss://stream.binance.com/stream", new WebProxy("http://127.0.0.1:8888"));
+        socket = new WebSocketClient(uri, fiddler);
         socket.OnOpen += SocketOnOpened;
         socket.OnClose += SocketOnClosed;
         socket.OnError += SocketOnError;
@@ -28,6 +30,9 @@ public class BinanceClient : IDisposable
         socket.OnClose -= SocketOnClosed;
         socket.OnError -= SocketOnError;
         socket.OnMessage -= SocketOnMessage;
+        socket.Dispose();
+
+        GC.SuppressFinalize(this);
     }
 
     public void Connect()
@@ -70,11 +75,11 @@ public class BinanceClient : IDisposable
     {
         if (stream.Length > 0)
         {
-            //var node = JsonNode.Parse(stream);
-            //if (node is not null)
+            var node = JsonNode.Parse(stream);
+            if (node is not null)
             {
-                Log($"Queued:{queued}, Stream.Length {stream.Length}");
-                ///Log($"Queued:{queued}, Message:{node.ToJsonString(options)}");
+                ///Log($"Queued:{queued}, Stream.Length {stream.Length}");
+                Log($"Queued:{queued}, Message:{node.ToJsonString(options)}");
             }
         }
         else
@@ -118,6 +123,7 @@ public class BinanceClient : IDisposable
         /// ThreadPool.GetAvailableThreads(out var workerThreads, out var completionPortThreads);
         /// Console.Out.WriteLine("WORK:{0}, IOCP:{1}", maxWorkerThreads - workerThreads, maxCompletionPortThreads - completionPortThreads);
         
-        await Console.Out.WriteLineAsync($"Thread:{Environment.CurrentManagedThreadId}, {message}");
+        /// await Console.Out.WriteLineAsync($"Thread:{Thread.CurrentThread.ManagedThreadId}, {message}");
+        await Console.Out.WriteLineAsync(message);
     }
 }
